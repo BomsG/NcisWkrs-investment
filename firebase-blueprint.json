@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and financial summary",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "balance": { "type": "number" },
+        "totalProfit": { "type": "number" },
+        "totalDeposits": { "type": "number" },
+        "activeInvestments": { "type": "number" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "name", "balance"]
+    },
+    "Investment": {
+      "title": "Investment",
+      "description": "An active or completed investment plan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "planName": { "type": "string" },
+        "amount": { "type": "number" },
+        "roi": { "type": "number" },
+        "duration": { "type": "number" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "completed"] },
+        "lastAccrual": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "planName", "amount", "roi", "duration", "startDate", "status"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial transaction history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "type": { "type": "string", "enum": ["Deposit", "Withdraw", "Investment"] },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pending", "Completed", "Failed"] },
+        "date": { "type": "string", "format": "date-time" },
+        "method": { "type": "string" }
+      },
+      "required": ["uid", "type", "amount", "status", "date"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data"
+    },
+    "/investments/{investmentId}": {
+      "schema": "Investment",
+      "description": "Investment records"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Transaction records"
+    }
+  }
+}
