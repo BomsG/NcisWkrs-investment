@@ -6,11 +6,19 @@ import {
   getDocFromServer,
   getDoc,
 } from "firebase/firestore";
-import firebaseConfig from "../firebase-applet-config.json";
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+};
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app, import.meta.env.VITE_FIREBASE_DATABASE_ID);
 
 export enum OperationType {
   CREATE = "create",
@@ -70,26 +78,15 @@ export function handleFirestoreError(
 
 export function listenToAuthState(callback: (user: any) => void) {
   return onAuthStateChanged(auth, async (firebaseUser) => {
-    console.log(
-      "🔥 onAuthStateChanged fired, firebaseUser:",
-      firebaseUser?.uid,
-    );
     if (firebaseUser) {
       try {
         const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-        console.log(
-          "📄 Firestore doc exists:",
-          userDoc.exists(),
-          "data:",
-          userDoc.data(),
-        );
         callback({ uid: firebaseUser.uid, ...userDoc.data() });
       } catch (error) {
-        console.error("💥 Firestore error:", error);
+        console.error("Firestore error:", error);
         callback({ uid: firebaseUser.uid, email: firebaseUser.email });
       }
     } else {
-      console.log("👻 No firebase user");
       callback(null);
     }
   });
