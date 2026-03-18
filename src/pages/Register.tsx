@@ -6,7 +6,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useStore } from "../store/useStore";
-
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
@@ -24,6 +23,25 @@ const registerSchema = z
     message: "Passwords don't match",
     path: ["confirmPassword"],
   });
+
+const getAuthErrorMessage = (code: string): string => {
+  switch (code) {
+    case "auth/email-already-in-use":
+      return "An account with this email already exists. Please sign in instead.";
+    case "auth/invalid-email":
+      return "Please enter a valid email address.";
+    case "auth/weak-password":
+      return "Password is too weak. Please use at least 6 characters.";
+    case "auth/network-request-failed":
+      return "Network error. Please check your internet connection.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please try again later.";
+    case "auth/api-key-not-valid":
+      return "Service configuration error. Please contact support.";
+    default:
+      return "Something went wrong during registration. Please try again.";
+  }
+};
 
 export default function Register() {
   const navigate = useNavigate();
@@ -48,9 +66,7 @@ export default function Register() {
         data.password,
       );
       const user = userCredential.user;
-      console.log("✅ Auth created:", user.uid);
 
-      // Create user document in Firestore
       const referralCode = Math.random()
         .toString(36)
         .substring(2, 8)
@@ -73,7 +89,7 @@ export default function Register() {
       navigate("/dashboard");
     } catch (err: any) {
       console.error("Registration error:", err);
-      setError(err.message || "An error occurred during registration");
+      setError(getAuthErrorMessage(err.code));
     } finally {
       setIsLoading(false);
     }

@@ -14,13 +14,34 @@ const loginSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
+const getAuthErrorMessage = (code: string): string => {
+  switch (code) {
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+      return "Incorrect email or password. Please try again.";
+    case "auth/user-not-found":
+      return "No account found with this email address.";
+    case "auth/invalid-email":
+      return "Please enter a valid email address.";
+    case "auth/user-disabled":
+      return "This account has been disabled. Please contact support.";
+    case "auth/too-many-requests":
+      return "Too many failed attempts. Please try again later or reset your password.";
+    case "auth/network-request-failed":
+      return "Network error. Please check your internet connection.";
+    case "auth/api-key-not-valid":
+      return "Service configuration error. Please contact support.";
+    default:
+      return "Something went wrong. Please try again.";
+  }
+};
+
 export default function Login() {
   const navigate = useNavigate();
   const { isAuthenticated, isAuthReady } = useStore();
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // ✅ Redirect to dashboard when auth is confirmed
   React.useEffect(() => {
     if (isAuthReady && isAuthenticated) {
       navigate("/dashboard");
@@ -40,10 +61,9 @@ export default function Login() {
     setError(null);
     try {
       await signInWithEmailAndPassword(auth, data.email, data.password);
-      // ✅ No navigate here — useEffect above handles it once store is ready
     } catch (err: any) {
       console.error("Login error:", err);
-      setError(err.message || "Invalid email or password");
+      setError(getAuthErrorMessage(err.code));
     } finally {
       setIsLoading(false);
     }
