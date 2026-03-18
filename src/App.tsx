@@ -19,6 +19,7 @@ import Admin from "./pages/Admin";
 import { useStore } from "./store/useStore";
 import { listenToAuthState } from "./firebase"; // 👈 import this
 import KYC from "./pages/KYC";
+import Support from "./pages/support";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isAuthReady } = useStore();
@@ -122,6 +123,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <Admin />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/support"
+          element={
+            <PrivateRoute>
+              <Support />
             </PrivateRoute>
           }
         />

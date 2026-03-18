@@ -20,6 +20,7 @@ import { cn } from "../../lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { Ticker } from "../ui/Ticker";
 import { ShieldCheck } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 
 interface SidebarItemProps {
   icon: React.ElementType;
@@ -73,6 +74,7 @@ export default function DashboardLayout({
     { icon: Users, label: "Referrals", href: "/referrals" },
     { icon: UserCircle, label: "Profile", href: "/profile" },
     { icon: ShieldCheck, label: "KYC Verification", href: "/kyc" },
+    { icon: MessageCircle, label: "Support", href: "/support" },
     ...(user?.role === "admin"
       ? [{ icon: Shield, label: "Admin", href: "/admin" }]
       : []),

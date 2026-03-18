@@ -26,7 +26,6 @@ import { useNavigate } from "react-router-dom";
 import { TradingViewWidget } from "../components/ui/TradingViewWidget";
 import { Copy, User, Mail, Phone, Calendar, ShieldCheck } from "lucide-react";
 
-
 const StatCard = ({ title, value, icon: Icon, trend, color }: any) => (
   <Card className="relative overflow-hidden group">
     <div

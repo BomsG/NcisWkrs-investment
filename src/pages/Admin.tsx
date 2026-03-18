@@ -11,6 +11,8 @@ import {
   Shield,
   Clock,
   Gift,
+  MessageCircle,
+  Send,
 } from "lucide-react";
 import {
   collection,
@@ -19,7 +21,6 @@ import {
   doc,
   updateDoc,
   increment,
-  orderBy,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { useStore } from "../store/useStore";
@@ -29,21 +30,26 @@ import { Navigate } from "react-router-dom";
 export default function Admin() {
   const { user } = useStore();
   const [activeTab, setActiveTab] = React.useState<
-    "overview" | "users" | "deposits" | "withdrawals"
+    "overview" | "users" | "deposits" | "withdrawals" | "support"
   >("overview");
   const [users, setUsers] = React.useState<any[]>([]);
   const [transactions, setTransactions] = React.useState<any[]>([]);
+  const [tickets, setTickets] = React.useState<any[]>([]);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
   const [isBonusModalOpen, setIsBonusModalOpen] = React.useState(false);
+  const [isReplyModalOpen, setIsReplyModalOpen] = React.useState(false);
   const [selectedUser, setSelectedUser] = React.useState<any>(null);
+  const [selectedTicket, setSelectedTicket] = React.useState<any>(null);
   const [newBalance, setNewBalance] = React.useState("");
   const [bonusAmount, setBonusAmount] = React.useState("");
   const [bonusType, setBonusType] = React.useState<"balance" | "totalProfit">(
     "balance",
   );
+  const [replyText, setReplyText] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
   const [bonusSuccess, setBonusSuccess] = React.useState(false);
+  const [replySuccess, setReplySuccess] = React.useState(false);
 
   if (!user || user.role !== "admin") {
     return <Navigate to="/dashboard" />;
@@ -76,9 +82,26 @@ export default function Admin() {
       },
     );
 
+    const unsubTickets = onSnapshot(
+      collection(db, "tickets"),
+      (snapshot) => {
+        const docs = snapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .sort(
+            (a: any, b: any) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+        setTickets(docs);
+      },
+      (error) => {
+        console.error("Tickets error:", error);
+      },
+    );
+
     return () => {
       unsubUsers();
       unsubTx();
+      unsubTickets();
     };
   }, []);
 
@@ -87,14 +110,12 @@ export default function Admin() {
     try {
       const txRef = doc(db, "transactions", tx.id);
       const userRef = doc(db, "users", tx.uid);
-
       if (tx.type === "Deposit") {
         await updateDoc(userRef, {
           balance: increment(tx.amount),
           totalDeposits: increment(tx.amount),
         });
       }
-
       await updateDoc(txRef, { status: "Completed" });
     } catch (error) {
       handleFirestoreError(
@@ -111,12 +132,10 @@ export default function Admin() {
     setIsLoading(true);
     try {
       const txRef = doc(db, "transactions", tx.id);
-
       if (tx.type === "Withdrawal") {
         const userRef = doc(db, "users", tx.uid);
         await updateDoc(userRef, { balance: increment(tx.amount) });
       }
-
       await updateDoc(txRef, { status: "Rejected" });
     } catch (error) {
       handleFirestoreError(
@@ -133,8 +152,9 @@ export default function Admin() {
     if (!selectedUser || !newBalance) return;
     setIsLoading(true);
     try {
-      const userRef = doc(db, "users", selectedUser.id);
-      await updateDoc(userRef, { balance: parseFloat(newBalance) });
+      await updateDoc(doc(db, "users", selectedUser.id), {
+        balance: parseFloat(newBalance),
+      });
       setIsEditModalOpen(false);
     } catch (error) {
       handleFirestoreError(
@@ -151,8 +171,7 @@ export default function Admin() {
     if (!selectedUser || !bonusAmount || parseFloat(bonusAmount) <= 0) return;
     setIsLoading(true);
     try {
-      const userRef = doc(db, "users", selectedUser.id);
-      await updateDoc(userRef, {
+      await updateDoc(doc(db, "users", selectedUser.id), {
         [bonusType]: increment(parseFloat(bonusAmount)),
       });
       setBonusSuccess(true);
@@ -169,6 +188,40 @@ export default function Admin() {
       );
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleReplyTicket = async () => {
+    if (!selectedTicket || !replyText) return;
+    setIsLoading(true);
+    try {
+      await updateDoc(doc(db, "tickets", selectedTicket.id), {
+        adminReply: replyText,
+        status: "Closed",
+        repliedAt: new Date().toISOString(),
+      });
+      setReplySuccess(true);
+      setTimeout(() => {
+        setReplySuccess(false);
+        setIsReplyModalOpen(false);
+        setReplyText("");
+      }, 1500);
+    } catch (error) {
+      handleFirestoreError(
+        error,
+        OperationType.UPDATE,
+        `tickets/${selectedTicket.id}`,
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCloseTicket = async (ticket: any) => {
+    try {
+      await updateDoc(doc(db, "tickets", ticket.id), { status: "Closed" });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `tickets/${ticket.id}`);
     }
   };
 
@@ -189,6 +242,8 @@ export default function Admin() {
       u.email?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  const openTickets = tickets.filter((t) => t.status === "Open").length;
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
@@ -201,23 +256,34 @@ export default function Admin() {
               Manage platform users and financial operations.
             </p>
           </div>
-          <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800">
-            {(["overview", "users", "deposits", "withdrawals"] as const).map(
-              (tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-bold capitalize transition-all",
-                    activeTab === tab
-                      ? "bg-emerald-500 text-white shadow-lg"
-                      : "text-slate-400 hover:text-white",
-                  )}
-                >
-                  {tab}
-                </button>
-              ),
-            )}
+          <div className="flex flex-wrap bg-slate-900 p-1 rounded-xl border border-slate-800 gap-1">
+            {(
+              [
+                "overview",
+                "users",
+                "deposits",
+                "withdrawals",
+                "support",
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-bold capitalize transition-all relative",
+                  activeTab === tab
+                    ? "bg-emerald-500 text-white shadow-lg"
+                    : "text-slate-400 hover:text-white",
+                )}
+              >
+                {tab}
+                {tab === "support" && openTickets > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[9px] flex items-center justify-center text-white font-bold">
+                    {openTickets}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -286,10 +352,8 @@ export default function Admin() {
                       className="hover:bg-slate-800/30 transition-colors"
                     >
                       <td className="px-6 py-4">
-                        <div>
-                          <p className="font-bold text-sm">{u.fullName}</p>
-                          <p className="text-xs text-slate-500">{u.email}</p>
-                        </div>
+                        <p className="font-bold text-sm">{u.fullName}</p>
+                        <p className="text-xs text-slate-500">{u.email}</p>
                       </td>
                       <td className="px-6 py-4 font-bold text-emerald-500">
                         {formatCurrency(u.balance || 0)}
@@ -438,6 +502,107 @@ export default function Admin() {
           </Card>
         )}
 
+        {activeTab === "support" && (
+          <Card className="overflow-hidden">
+            <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <MessageCircle className="text-emerald-500" size={22} /> Support
+                Tickets
+              </h3>
+              <div className="flex gap-3 text-xs font-bold">
+                <span className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-full">
+                  {tickets.filter((t) => t.status === "Open").length} Open
+                </span>
+                <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full">
+                  {tickets.filter((t) => t.status === "Closed").length} Closed
+                </span>
+              </div>
+            </div>
+            <div className="divide-y divide-slate-800">
+              {tickets.length === 0 ? (
+                <div className="text-center py-16">
+                  <MessageCircle
+                    className="mx-auto text-slate-700 mb-4"
+                    size={48}
+                  />
+                  <p className="text-slate-500">No support tickets yet.</p>
+                </div>
+              ) : (
+                tickets.map((ticket) => (
+                  <div
+                    key={ticket.id}
+                    className="p-6 hover:bg-slate-800/20 transition-colors"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span
+                            className={cn(
+                              "px-2 py-1 rounded-md text-[10px] font-bold uppercase",
+                              ticket.status === "Open"
+                                ? "bg-blue-500/10 text-blue-400"
+                                : "bg-emerald-500/10 text-emerald-400",
+                            )}
+                          >
+                            {ticket.status}
+                          </span>
+                          <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded-md">
+                            {ticket.category}
+                          </span>
+                        </div>
+                        <p className="font-bold">{ticket.subject}</p>
+                        <p className="text-xs text-slate-500">
+                          {ticket.fullName} · {ticket.email}
+                        </p>
+                        <p className="text-sm text-slate-400 leading-relaxed bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                          {ticket.message}
+                        </p>
+                        {ticket.adminReply && (
+                          <div className="bg-emerald-500/5 border border-emerald-500/20 p-3 rounded-xl">
+                            <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1">
+                              Your Reply
+                            </p>
+                            <p className="text-sm text-slate-300">
+                              {ticket.adminReply}
+                            </p>
+                          </div>
+                        )}
+                        <p className="text-[10px] text-slate-600">
+                          {new Date(ticket.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {ticket.status === "Open" && (
+                        <div className="flex gap-2 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-emerald-500 hover:text-emerald-400"
+                            onClick={() => {
+                              setSelectedTicket(ticket);
+                              setReplyText("");
+                              setReplySuccess(false);
+                              setIsReplyModalOpen(true);
+                            }}
+                          >
+                            <Send size={14} className="mr-1" /> Reply
+                          </Button>
+                          <button
+                            onClick={() => handleCloseTicket(ticket)}
+                            className="p-2 bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-all"
+                            title="Close ticket"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+        )}
+
         {/* Edit Balance Modal */}
         <Modal
           isOpen={isEditModalOpen}
@@ -505,7 +670,6 @@ export default function Admin() {
                     {selectedUser?.email}
                   </p>
                 </div>
-
                 <div className="grid grid-cols-2 gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
                   <div>
                     <p className="text-xs text-slate-500 mb-1">
@@ -524,7 +688,6 @@ export default function Admin() {
                     </p>
                   </div>
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-400">
                     Bonus Type
@@ -554,7 +717,6 @@ export default function Admin() {
                     </button>
                   </div>
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-400">
                     Bonus Amount ($)
@@ -583,7 +745,6 @@ export default function Admin() {
                     ))}
                   </div>
                 </div>
-
                 <Button
                   className="w-full"
                   onClick={handleAddBonus}
@@ -592,6 +753,65 @@ export default function Admin() {
                 >
                   <Gift size={16} className="mr-2" />
                   Add {bonusType === "balance" ? "Balance" : "Profit"} Bonus
+                </Button>
+              </>
+            )}
+          </div>
+        </Modal>
+
+        {/* Reply Ticket Modal */}
+        <Modal
+          isOpen={isReplyModalOpen}
+          onClose={() => setIsReplyModalOpen(false)}
+          title="Reply to Ticket"
+        >
+          <div className="space-y-6 py-4">
+            {replySuccess ? (
+              <div className="text-center py-8 space-y-3">
+                <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto">
+                  <Check size={32} className="text-emerald-500" />
+                </div>
+                <p className="font-bold text-emerald-500">Reply Sent!</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-slate-400">
+                    Ticket
+                  </label>
+                  <p className="font-bold">{selectedTicket?.subject}</p>
+                  <p className="text-xs text-slate-500">
+                    {selectedTicket?.fullName} · {selectedTicket?.email}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-800">
+                  <p className="text-xs font-bold text-slate-500 mb-1">
+                    User's Message
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    {selectedTicket?.message}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-400">
+                    Your Reply
+                  </label>
+                  <textarea
+                    className="w-full bg-[#0a0b0d] border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all resize-none"
+                    rows={5}
+                    placeholder="Type your reply here..."
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                  />
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={handleReplyTicket}
+                  isLoading={isLoading}
+                  disabled={!replyText}
+                >
+                  <Send size={16} className="mr-2" />
+                  Send Reply & Close Ticket
                 </Button>
               </>
             )}
